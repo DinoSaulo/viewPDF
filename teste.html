@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+
+  <input type="file" id="files" name="files" accept=".pdf"/>
+  <hr />
+  <br />
+  <!-- Esse textarea armazena todo o arquivo em formato base64 -->
+  <!-- pq isso? : se armazenasse em uma variável ela simplesmente poderia estourar devido a um pdf enorme -->
+  <textarea id="base64" rows="15" cols="230" style="display:none"></textarea>
+
+  <!-- Canvas para a renderização do PDF -->
+  <canvas id="the-canvas"></canvas>
+
+  <!-- Importando libraries -->
+  <script src="pdf.js"></script>
+  <script src="pdf.worker.js"></script>
+
+</body>
+
+</html>
+
+<script>
+  // Verifica se há suporte à API de arquivos.
+  if (window.File && window.FileReader && window.FileList && window.Blob) {
+    document.getElementById('files').addEventListener('change', handleFileSelect, false);
+  } else {
+    alert('As APIs de arquivos não são suportadas neste navegador.');
+  }
+
+  function handleFileSelect(evt) {
+    var f = evt.target.files[0]; // FileList object
+    var reader = new FileReader();
+    // Closure para capturar as informações do arquivo.
+    reader.onload = (function (theFile) {
+      return function (e) {
+        var binaryData = e.target.result;
+        // Convertendo dados binários em base 64
+        var base64String = window.btoa(binaryData);
+        // mostrando o arquivo convertido em base64
+        document.getElementById('base64').value = base64String;
+        // renderizando o arquivo
+        render();
+        alert('PDF Carregado com sucesso!\nClique em OK para visualizar');
+      };
+    })(f);
+    // Read in the image file as a data URL.
+    reader.readAsBinaryString(f);
+  }
+
+  function render() {
+    filesx(document.getElementById("base64").value);
+  }
+
+  // atob() é usado para converter PDF codificado em base64 em dados binários.
+  // (https://developer.mozilla.org/en-US/docs/Web/API/WindowBase64/Base64_encoding_and_decoding)
+  function filesx(img) {
+    var pdfData = atob(img);
+
+    // Carregado via tag <script>, cria um atalho para acessar as exportações do PDF.js.
+    var pdfjsLib = window['pdfjs-dist/build/pdf'];
+
+    // A propriedade workerSrc deve ser especificada.
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '//mozilla.github.io/pdf.js/build/pdf.worker.js';
+
+    // Usando o objeto DocumentInitParameters para carregar dados binários.
+    var loadingTask = pdfjsLib.getDocument({
+      data: pdfData
+    });
+    loadingTask.promise.then(function (pdf) {
+      console.log('PDF carregado');
+
+      var pageNumber = 2; // <-- Definindo a página que será aberta
+      pdf.getPage(pageNumber).then(function (page) {
+        console.log('Pagina carregada');
+
+        var scale = 1.5;
+        var viewport = page.getViewport({
+          scale: scale
+        });
+
+        // Preparando telas usando as dimensões da página PDF
+        var canvas = document.getElementById('the-canvas');
+        var context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        // Renderizar página PDF no contexto da tela
+        var renderContext = {
+          canvasContext: context,
+          viewport: viewport
+        };
+        var renderTask = page.render(renderContext);
+        renderTask.promise.then(function () {
+          console.log('Page rendered');
+        });
+      });
+    }, function (reason) {
+      // PDF loading error
+      console.error(reason);
+    });
+  }
+</script>
